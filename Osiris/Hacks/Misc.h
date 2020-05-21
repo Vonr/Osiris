@@ -40,6 +40,7 @@ namespace Misc
     void moonwalk(UserCmd* cmd) noexcept;
     void autoJumpBug(UserCmd* cmd) noexcept;
     void playHitSound(GameEvent& event) noexcept;
+    void drawAimbotFov() noexcept;
     void killSound(GameEvent& event) noexcept;
     void purchaseList(GameEvent* event = nullptr) noexcept;
 }
