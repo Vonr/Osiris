@@ -8,6 +8,8 @@
 #include "imgui/imgui_impl_dx9.h"
 #include "imgui/imgui_impl_win32.h"
 
+#include "MinHook/MinHook.h"
+
 #include "Config.h"
 #include "EventListener.h"
 #include "GUI.h"
@@ -78,16 +80,12 @@ static LRESULT __stdcall wndProc(HWND window, UINT msg, WPARAM wParam, LPARAM lP
 
     interfaces->inputSystem->enableInput(!gui->open);
 
-    return CallWindowProc(hooks->originalWndProc, window, msg, wParam, lParam);
+    return CallWindowProcW(hooks->originalWndProc, window, msg, wParam, lParam);
 }
 
 static HRESULT __stdcall present(IDirect3DDevice9* device, const RECT* src, const RECT* dest, HWND windowOverride, const RGNDATA* dirtyRegion) noexcept
 {
     static bool imguiInit{ ImGui_ImplDX9_Init(device) };
-
-    device->SetRenderState(D3DRS_COLORWRITEENABLE, D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
-    IDirect3DVertexDeclaration9* vertexDeclaration;
-    device->GetVertexDeclaration(&vertexDeclaration);
 
     ImGui_ImplDX9_NewFrame();
     ImGui_ImplWin32_NewFrame();
@@ -100,10 +98,11 @@ static HRESULT __stdcall present(IDirect3DDevice9* device, const RECT* src, cons
 
     ImGui::EndFrame();
     ImGui::Render();
-    ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
 
-    device->SetVertexDeclaration(vertexDeclaration);
-    vertexDeclaration->Release();
+    if (device->BeginScene() == D3D_OK) {
+        ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+        device->EndScene();
+    }
 
     return hooks->originalPresent(device, src, dest, windowOverride, dirtyRegion);
 }
@@ -111,9 +110,7 @@ static HRESULT __stdcall present(IDirect3DDevice9* device, const RECT* src, cons
 static HRESULT __stdcall reset(IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* params) noexcept
 {
     ImGui_ImplDX9_InvalidateDeviceObjects();
-    auto result = hooks->originalReset(device, params);
-    ImGui_ImplDX9_CreateDeviceObjects();
-    return result;
+    return hooks->originalReset(device, params);
 }
 
 static bool __stdcall createMove(float inputSampleTime, UserCmd* cmd) noexcept
@@ -226,17 +223,17 @@ static void __stdcall drawModelExecute(void* ctx, void* state, const ModelRender
         return;
 
     static Chams chams;
-    if (chams.render(ctx, state, info, customBoneToWorld))
+    if (!chams.render(ctx, state, info, customBoneToWorld))
         hooks->modelRender.callOriginal<void, 21>(ctx, state, std::cref(info), customBoneToWorld);
-    interfaces->studioRender->forcedMaterialOverride(nullptr);  
+    interfaces->studioRender->forcedMaterialOverride(nullptr);
 }
 
-static bool __stdcall svCheatsGetBool() noexcept
+static bool __fastcall svCheatsGetBool(void* _this) noexcept
 {
     if (uintptr_t(_ReturnAddress()) == memory->cameraThink && config->visuals.thirdperson)
         return true;
     else
-        return hooks->svCheats.callOriginal<bool, 13>();
+        return hooks->svCheats.getOriginal<bool>(13)(_this);
 }
 
 static void __stdcall paintTraverse(unsigned int panel, bool forceRepaint, bool allowForce) noexcept
@@ -245,7 +242,7 @@ static void __stdcall paintTraverse(unsigned int panel, bool forceRepaint, bool 
         Esp::render();
         Misc::drawBombTimer();
         Misc::spectatorList();
-        Misc::watermark();        
+        Misc::watermark();
         Visuals::hitMarker();
         Misc::drawAimbotFov();
     }
@@ -291,7 +288,7 @@ static void __stdcall emitSound(SoundData data) noexcept
         if (const auto entity = interfaces->entityList->getEntity(data.entityIndex); localPlayer && entity && entity->isPlayer()) {
             if (data.entityIndex == localPlayer->index())
                 data.volume *= get(0) / 100.0f;
-            else if (!entity->isEnemy())
+            else if (!entity->isOtherEnemy(localPlayer.get()))
                 data.volume *= get(1) / 100.0f;
             else
                 data.volume *= get(2) / 100.0f;
@@ -315,6 +312,19 @@ static void __stdcall emitSound(SoundData data) noexcept
 
 static bool __stdcall shouldDrawFog() noexcept
 {
+    if constexpr (std::is_same_v<HookType, MinHook>) {
+#ifdef _DEBUG
+    // Check if we always get the same return address
+    if (*static_cast<std::uint32_t*>(_ReturnAddress()) == 0x6274C084) {
+        static const auto returnAddress = std::uintptr_t(_ReturnAddress());
+        assert(returnAddress == std::uintptr_t(_ReturnAddress()));
+    }
+#endif
+
+    if (*static_cast<std::uint32_t*>(_ReturnAddress()) != 0x6274C084)
+        return hooks->clientMode.callOriginal<bool, 17>();
+    }
+
     return !config->visuals.noFog;
 }
 
@@ -334,25 +344,30 @@ static void __stdcall lockCursor() noexcept
 
 static void __stdcall setDrawColor(int r, int g, int b, int a) noexcept
 {
-    auto returnAddress = reinterpret_cast<uintptr_t>(_ReturnAddress());
-    if (config->visuals.noScopeOverlay && (returnAddress == memory->scopeArc || returnAddress == memory->scopeLens))
+#ifdef _DEBUG
+    // Check if we always get the same return address
+    if (*static_cast<std::uint32_t*>(_ReturnAddress()) == 0x20244C8B) {
+        static const auto returnAddress = std::uintptr_t(_ReturnAddress());
+        assert(returnAddress == std::uintptr_t(_ReturnAddress()));
+    }
+    if (*reinterpret_cast<std::uint32_t*>(std::uintptr_t(_ReturnAddress()) + 6) == 0x01ACB7FF) {
+        static const auto returnAddress = std::uintptr_t(_ReturnAddress());
+        assert(returnAddress == std::uintptr_t(_ReturnAddress()));
+    }
+#endif
+
+    if (config->visuals.noScopeOverlay && (*static_cast<std::uint32_t*>(_ReturnAddress()) == 0x20244C8B || *reinterpret_cast<std::uint32_t*>(std::uintptr_t(_ReturnAddress()) + 6) == 0x01ACB7FF))
         a = 0;
     hooks->surface.callOriginal<void, 15>(r, g, b, a);
 }
 
 static bool __stdcall fireEventClientSide(GameEvent* event) noexcept
 {
+    // TODO: remove this hook after testing the new method of overriding knife icon
     if (event) {
         switch (fnv::hashRuntime(event->getName())) {
         case fnv::hash("player_death"):
-            Misc::killMessage(*event);
-            Misc::killSound(*event);
-            SkinChanger::overrideHudIcon(*event);
-            break;
-        case fnv::hash("player_hurt"):
-            Misc::playHitSound(*event);
-            Visuals::hitEffect(event);                
-            Visuals::hitMarker(event);
+            // SkinChanger::overrideHudIcon(*event);
             break;
         }
     }
@@ -411,7 +426,7 @@ static int __fastcall dispatchSound(SoundInfo& soundInfo) noexcept
             if (auto entity{ interfaces->entityList->getEntity(soundInfo.entityIndex) }; entity && entity->isPlayer()) {
                 if (localPlayer && soundInfo.entityIndex == localPlayer->index())
                     soundInfo.volume *= get(0) / 100.0f;
-                else if (!entity->isEnemy())
+                else if (!entity->isOtherEnemy(localPlayer.get()))
                     soundInfo.volume *= get(1) / 100.0f;
                 else
                     soundInfo.volume *= get(2) / 100.0f;
@@ -438,19 +453,42 @@ static int __stdcall render2dEffectsPreHud(int param) noexcept
     return hooks->viewRender.callOriginal<int, 39>(param);
 }
 
-static void* __stdcall getDemoPlaybackParameters() noexcept
+static const DemoPlaybackParameters* __stdcall getDemoPlaybackParameters() noexcept
 {
-    if (uintptr_t returnAddress = uintptr_t(_ReturnAddress()); config->misc.revealSuspect && (returnAddress == memory->test || returnAddress == memory->test2))
-        return nullptr;
+    const auto params = hooks->engine.callOriginal<const DemoPlaybackParameters*, 218>();
 
-    return hooks->engine.callOriginal<void*, 218>();
+#ifdef _DEBUG
+    // Check if we always get the same return address
+    if (*static_cast<std::uint64_t*>(_ReturnAddress()) == 0x79801F74C985C88B) {
+        static const auto returnAddress = std::uintptr_t(_ReturnAddress());
+        assert(returnAddress == std::uintptr_t(_ReturnAddress()));
+    }
+#endif
+
+    if (params && config->misc.revealSuspect && *static_cast<std::uint64_t*>(_ReturnAddress()) != 0x79801F74C985C88B) { // client.dll : 8B C8 85 C9 74 1F 80 79 10 00 , there game decides whether to show overwatch panel
+        static DemoPlaybackParameters customParams;
+        customParams = *params;
+        customParams.anonymousPlayerIdentity = false;
+        return &customParams;
+    }
+
+    return params;
 }
 
 static bool __stdcall isPlayingDemo() noexcept
 {
+#ifdef _DEBUG
+    // Check if we always get the same return address
+    if (*static_cast<std::uintptr_t*>(_ReturnAddress()) == 0x0975C084
+        && **reinterpret_cast<std::uintptr_t**>(std::uintptr_t(_AddressOfReturnAddress()) + 4) == 0x0C75C084) {
+        static const auto returnAddress = std::uintptr_t(_ReturnAddress());
+        assert(returnAddress == std::uintptr_t(_ReturnAddress()));
+    }
+#endif
+
     if (config->misc.revealMoney
-        && *static_cast<uintptr_t*>(_ReturnAddress()) == 0x0975C084  // client_panorama.dll : 84 C0 75 09 38 05
-        && **reinterpret_cast<uintptr_t**>(uintptr_t(_AddressOfReturnAddress()) + 4) == 0x0C75C084) { // client_panorama.dll : 84 C0 75 0C 5B
+        && *static_cast<uintptr_t*>(_ReturnAddress()) == 0x0975C084 // client.dll : 84 C0 75 09 38 05
+        && **reinterpret_cast<uintptr_t**>(uintptr_t(_AddressOfReturnAddress()) + 4) == 0x0C75C084) { // client.dll : 84 C0 75 0C 5B
         return true;
     }
     return hooks->engine.callOriginal<bool, 82>();
@@ -500,7 +538,8 @@ Hooks::Hooks(HMODULE module) noexcept
     interfaces = std::make_unique<const Interfaces>();
     memory = std::make_unique<const Memory>();
 
-    originalWndProc = WNDPROC(SetWindowLongPtrA(FindWindowW(L"Valve001", nullptr), GWLP_WNDPROC, LONG_PTR(wndProc)));
+    window = FindWindowW(L"Valve001", nullptr);
+    originalWndProc = WNDPROC(SetWindowLongPtrW(window, GWLP_WNDPROC, LONG_PTR(wndProc)));
 }
 
 void Hooks::install() noexcept
@@ -511,7 +550,10 @@ void Hooks::install() noexcept
     **reinterpret_cast<decltype(present)***>(memory->present) = present;
     originalReset = **reinterpret_cast<decltype(originalReset)**>(memory->reset);
     **reinterpret_cast<decltype(reset)***>(memory->reset) = reset;
-    
+
+    if constexpr (std::is_same_v<HookType, MinHook>)
+        MH_Initialize();
+
     bspQuery.init(interfaces->engine->getBSPTreeQuery());
     client.init(interfaces->client);
     clientMode.init(memory->clientMode);
@@ -551,6 +593,9 @@ void Hooks::install() noexcept
         *memory->dispatchSound = uintptr_t(dispatchSound) - uintptr_t(memory->dispatchSound + 1);
         VirtualProtect(memory->dispatchSound, 4, oldProtection, nullptr);
     }
+
+    if constexpr (std::is_same_v<HookType, MinHook>)
+        MH_EnableHook(MH_ALL_HOOKS);
 }
 
 extern "C" BOOL WINAPI _CRT_INIT(HMODULE module, DWORD reason, LPVOID reserved);
@@ -560,16 +605,11 @@ static DWORD WINAPI unload(HMODULE module) noexcept
     Sleep(100);
 
     interfaces->inputSystem->enableInput(true);
+    eventListener->remove();
+
     ImGui_ImplDX9_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
-
-    hooks.reset();
-    eventListener.reset();
-    memory.reset();
-    interfaces.reset();
-    gui.reset();
-    config.reset();
 
     _CRT_INIT(module, DLL_PROCESS_DETACH, nullptr);
 
@@ -578,6 +618,11 @@ static DWORD WINAPI unload(HMODULE module) noexcept
 
 void Hooks::uninstall() noexcept
 {
+    if constexpr (std::is_same_v<HookType, MinHook>) {
+        MH_DisableHook(MH_ALL_HOOKS);
+        MH_Uninitialize();
+    }
+
     bspQuery.restore();
     client.restore();
     clientMode.restore();
@@ -594,7 +639,7 @@ void Hooks::uninstall() noexcept
 
     Glow::clearCustomObjects();
 
-    SetWindowLongPtrA(FindWindowW(L"Valve001", nullptr), GWLP_WNDPROC, LONG_PTR(originalWndProc));
+    SetWindowLongPtrW(window, GWLP_WNDPROC, LONG_PTR(originalWndProc));
     **reinterpret_cast<void***>(memory->present) = originalPresent;
     **reinterpret_cast<void***>(memory->reset) = originalReset;
 
@@ -605,60 +650,4 @@ void Hooks::uninstall() noexcept
 
     if (HANDLE thread = CreateThread(nullptr, 0, LPTHREAD_START_ROUTINE(unload), module, 0, nullptr))
         CloseHandle(thread);
-}
-
-uintptr_t* Hooks::Vmt::findFreeDataPage(void* const base, size_t vmtSize) noexcept
-{
-    MEMORY_BASIC_INFORMATION mbi;
-    VirtualQuery(base, &mbi, sizeof(mbi));
-    MODULEINFO moduleInfo;
-    GetModuleInformation(GetCurrentProcess(), static_cast<HMODULE>(mbi.AllocationBase), &moduleInfo, sizeof(moduleInfo));
-
-    auto moduleEnd{ reinterpret_cast<uintptr_t*>(static_cast<std::byte*>(moduleInfo.lpBaseOfDll) + moduleInfo.SizeOfImage) };
-
-    for (auto currentAddress = moduleEnd - vmtSize; currentAddress > moduleInfo.lpBaseOfDll; currentAddress -= *currentAddress ? vmtSize : 1)
-        if (!*currentAddress)
-            if (VirtualQuery(currentAddress, &mbi, sizeof(mbi)) && mbi.State == MEM_COMMIT
-                && mbi.Protect == PAGE_READWRITE && mbi.RegionSize >= vmtSize * sizeof(uintptr_t)
-                && std::all_of(currentAddress, currentAddress + vmtSize, [](uintptr_t a) { return !a; }))
-                return currentAddress;
-
-    return nullptr;
-}
-
-auto Hooks::Vmt::calculateLength(uintptr_t* vmt) noexcept
-{
-    size_t length{ 0 };
-    MEMORY_BASIC_INFORMATION memoryInfo;
-    while (VirtualQuery(LPCVOID(vmt[length]), &memoryInfo, sizeof(memoryInfo)) && memoryInfo.Protect == PAGE_EXECUTE_READ)
-        length++;
-    return length;
-}
-
-bool Hooks::Vmt::init(void* const base) noexcept
-{
-    assert(base);
-    this->base = base;
-    bool init = false;
-
-    if (!oldVmt) {
-        oldVmt = *reinterpret_cast<uintptr_t**>(base);
-        length = calculateLength(oldVmt) + 1;
-
-        if (newVmt = findFreeDataPage(base, length))
-            std::copy(oldVmt - 1, oldVmt - 1 + length, newVmt);
-        assert(newVmt);
-        init = true;
-    }
-    if (newVmt)
-        *reinterpret_cast<uintptr_t**>(base) = newVmt + 1;
-    return init;
-}
-
-void Hooks::Vmt::restore() noexcept
-{
-    if (base && oldVmt)
-        *reinterpret_cast<uintptr_t**>(base) = oldVmt;
-    if (newVmt)
-        ZeroMemory(newVmt, length * sizeof(uintptr_t));
 }

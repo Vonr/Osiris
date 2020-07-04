@@ -93,6 +93,15 @@ void Misc::inverseRagdollGravity() noexcept
 
 void Misc::updateClanTag(bool tagChanged) noexcept
 {
+    if (config->misc.clocktag) {
+        const auto time = std::time(nullptr);
+        const auto localTime = std::localtime(&time);
+        char s[11];
+        s[0] = '\0';
+        sprintf_s(s, "[%02d:%02d:%02d]", localTime->tm_hour, localTime->tm_min, localTime->tm_sec);
+        memory->setClanTag(s, s);
+    }
+
     if (config->misc.customClanTag) {
         static std::string clanTag;
 
@@ -102,22 +111,15 @@ void Misc::updateClanTag(bool tagChanged) noexcept
                 clanTag.push_back(' ');
         }
 
-        static auto lastTime{ 0.0f };
-        if (memory->globalVars->realtime - lastTime < 0.6f) return;
+        static auto lastTime = 0.0f;
+        if (memory->globalVars->realtime - lastTime < 0.6f)
+            return;
         lastTime = memory->globalVars->realtime;
 
         if (config->misc.animatedClanTag && !clanTag.empty())
-            std::rotate(std::begin(clanTag), std::next(std::begin(clanTag)), std::end(clanTag));
+            std::rotate(clanTag.begin(), clanTag.begin() + 1, clanTag.end());
 
         memory->setClanTag(clanTag.c_str(), clanTag.c_str());
-
-        if (config->misc.clocktag) {
-            const auto time{ std::time(nullptr) };
-            const auto localTime{ std::localtime(&time) };
-
-            const auto timeString{ '[' + std::to_string(localTime->tm_hour) + ':' + std::to_string(localTime->tm_min) + ':' + std::to_string(localTime->tm_sec) + ']' };
-            memory->setClanTag(timeString.c_str(), timeString.c_str());
-        }
     }
 }
 
@@ -710,13 +712,16 @@ void Misc::purchaseList(GameEvent* event) noexcept
             const auto player = interfaces->entityList->getEntity(interfaces->engine->getPlayerForUserID(event->getInt("userid")));
 
             if (player && localPlayer && memory->isOtherEnemy(player, localPlayer.get())) {
-                if (const auto definition = memory->itemSystem()->getItemSchema()->getItemDefinitionByName(event->getString("weapon"))) {
+                const auto weaponName = event->getString("weapon");
+                auto& purchase = purchaseDetails[player->getPlayerName(true)];
+
+                if (const auto definition = memory->itemSystem()->getItemSchema()->getItemDefinitionByName(weaponName)) {
                     if (const auto weaponInfo = memory->weaponSystem->getWeaponInfo(definition->getWeaponId())) {
-                        purchaseDetails[player->getPlayerName(true)].second += weaponInfo->price;
+                        purchase.second += weaponInfo->price;
                         totalCost += weaponInfo->price;
                     }
                 }
-                std::string weapon = event->getString("weapon");
+                std::string weapon = weaponName;
 
                 if (weapon.starts_with("weapon_"))
                     weapon.erase(0, 7);
@@ -724,13 +729,13 @@ void Misc::purchaseList(GameEvent* event) noexcept
                     weapon.erase(0, 5);
 
                 if (weapon.starts_with("smoke"))
-                    weapon = "smoke";
+                    weapon.erase(5);
                 else if (weapon.starts_with("m4a1_s"))
-                    weapon = "m4a1_s";
+                    weapon.erase(6);
                 else if (weapon.starts_with("usp_s"))
-                    weapon = "usp_s";
+                    weapon.erase(5);
 
-                purchaseDetails[player->getPlayerName(true)].first.push_back(weapon);
+                purchase.first.push_back(weapon);
                 ++purchaseTotal[weapon];
             }
             break;

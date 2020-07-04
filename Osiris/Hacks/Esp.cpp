@@ -102,7 +102,7 @@ struct BoundingBox {
                                 i & 2 ? maxs.y : mins.y,
                                 i & 4 ? maxs.z : mins.z };
 
-            if (!worldToScreen(point.transform(entity->coordinateFrame()), vertices[i])) {
+            if (!worldToScreen(point.transform(entity->toWorldTransform()), vertices[i])) {
                 valid = false;
                 return;
             }
@@ -604,7 +604,7 @@ void Esp::render() noexcept
                 || entity->isDormant() || !entity->isAlive())
                 continue;
 
-            if (!entity->isEnemy()) {
+            if (!entity->isOtherEnemy(localPlayer.get())) {
                 if (!renderPlayerEsp(entity, ALLIES_ALL)) {
                     if (entity->isVisible())
                         renderPlayerEsp(entity, ALLIES_VISIBLE);
