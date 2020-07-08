@@ -40,20 +40,19 @@ void Misc::edgejump(UserCmd* cmd) noexcept
 }
 
 void Misc::autoJumpBug(UserCmd* cmd) noexcept {
-    if (!localPlayer)
+    if (!localPlayer || !config->misc.autoJumpBug)
         return;
 
     static auto hasLanded = false;
 
-    if (config->misc.autoJumpBug) {
-        if ((EnginePrediction::getFlags() & 1) && !(localPlayer->flags() & 1)) {
-            cmd->buttons |= UserCmd::IN_DUCK;
-            hasLanded = false;
-        } else if (!hasLanded) {
-            cmd->buttons &= ~UserCmd::IN_DUCK;
-            hasLanded = true;
-        }
+    if (!hasLanded && !(EnginePrediction::getFlags() & 1)) {
+        cmd->buttons &= ~UserCmd::IN_DUCK;
+        hasLanded = true;
+    } else if (!(localPlayer->flags() & 1)) {
+        cmd->buttons |= UserCmd::IN_DUCK;
+        hasLanded = false;
     }
+   
 }
 
 void Misc::slowwalk(UserCmd* cmd) noexcept
