@@ -373,7 +373,6 @@ static void __stdcall overrideView(ViewSetup* setup) noexcept
     if (localPlayer && !localPlayer->isScoped())
         setup->fov += config->visuals.fov;
     setup->farZ += config->visuals.farZ * 10;
-    config->misc.actualFov = setup->fov;
     hooks->clientMode.callOriginal<void, 18>(setup);
 }
 

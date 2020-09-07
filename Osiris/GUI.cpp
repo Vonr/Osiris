@@ -1,4 +1,4 @@
-﻿#include <fstream>
+#include <fstream>
 #include <functional>
 #include <string>
 #include <ShlObj.h>
@@ -388,8 +388,6 @@ void GUI::renderTriggerbotWindow(bool contentOnly) noexcept
     config->triggerbot[currentWeapon].minDamage = std::clamp(config->triggerbot[currentWeapon].minDamage, 0, 250);
     ImGui::Checkbox("Killshot", &config->triggerbot[currentWeapon].killshot);
     ImGui::SliderFloat("Burst Time", &config->triggerbot[currentWeapon].burstTime, 0.0f, 0.5f, "%.3f s");
-    ImGui::SliderFloat("Max aim inaccuracy", &config->triggerbot[currentWeapon].maxAimInaccuracy, 0.0f, 1.0f, "%.5f", 2.0f);
-    ImGui::SliderFloat("Max shot inaccuracy", &config->triggerbot[currentWeapon].maxShotInaccuracy, 0.0f, 1.0f, "%.5f", 2.0f);
 
     if (!contentOnly)
         ImGui::End();
@@ -999,20 +997,21 @@ void GUI::renderMiscWindow(bool contentOnly) noexcept
     ImGui::Checkbox("Anti AFK kick", &config->misc.antiAfkKick);
     ImGui::Checkbox("Auto strafe", &config->misc.autoStrafe);
     ImGui::Checkbox("Bunny hop", &config->misc.bunnyHop);
-    ImGui::SliderInt("Bhop hitchance", &config->misc.bhopHitchance, 0, 100, "%d%");
-    ImGui::SliderInt("Min hits", &config->misc.bhopMinHits, 0, 20, "%d%");
-    ImGui::SliderInt("Max hits", &config->misc.bhopMaxHits, 0, 20, "%d%");
+    ImGui::SliderInt("Bhop hitchance", &config->misc.bhopHitChance, 0, 100, "%d%");
+    ImGui::SliderInt("Min hits", &config->misc.bhopMinHits, 0, 50, "%d%");
+    ImGui::SliderInt("Max hits", &config->misc.bhopMaxHits, -1, 50, "%d%");
+    ImGui::Checkbox("Auto Jumpbug", &config->misc.autoJumpBug);
     ImGui::Checkbox("Fast duck", &config->misc.fastDuck);
     ImGui::Checkbox("Moonwalk", &config->misc.moonwalk);
     ImGui::Checkbox("Edge Jump", &config->misc.edgejump);
     ImGui::SameLine();
     hotkey(config->misc.edgejumpkey);
-    ImGui::Checkbox("Auto Jumpbug", &config->misc.autoJumpBug);
     ImGui::Checkbox("Slowwalk", &config->misc.slowwalk);
     ImGui::SameLine();
     hotkey(config->misc.slowwalkKey);
     ImGui::Checkbox("Sniper crosshair", &config->misc.sniperCrosshair);
     ImGui::Checkbox("Recoil crosshair", &config->misc.recoilCrosshair);
+    ImGui::Checkbox("Draw Aimbot FOV", &config->misc.drawAimbotFov);
     ImGui::Checkbox("Auto pistol", &config->misc.autoPistol);
     ImGui::Checkbox("Auto reload", &config->misc.autoReload);
     ImGui::Checkbox("Auto accept", &config->misc.autoAccept);
@@ -1090,7 +1089,6 @@ void GUI::renderMiscWindow(bool contentOnly) noexcept
     ImGui::SetNextItemWidth(120.0f);
     ImGui::SliderFloat("Max angle delta", &config->misc.maxAngleDelta, 0.0f, 255.0f, "%.2f");
     ImGui::Checkbox("Fake prime", &config->misc.fakePrime);
-    ImGui::Checkbox("Draw aimbot FOV", &config->misc.drawAimbotFov);
     ImGui::Checkbox("Purchase List", &config->misc.purchaseList.enabled);
     ImGui::SameLine();
 

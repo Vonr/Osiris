@@ -73,8 +73,6 @@ public:
         int shotDelay = 0;
         int minDamage = 1;
         float burstTime = 0.0f;
-        float maxAimInaccuracy{ 1.0f };
-        float maxShotInaccuracy{ 1.0f };
     };
     std::array<Triggerbot, 40> triggerbot;
 
@@ -228,22 +226,23 @@ public:
         bool antiAfkKick{ false };
         bool autoStrafe{ false };
         bool bunnyHop{ false };
-        int bhopHitchance{ 100 };
+        int bhopHitChance{ 50 };
         int bhopMinHits{ 0 };
-        int bhopMaxHits{ 0 };
+        int bhopMaxHits{ 8 };
+        bool autoJumpBug{ true };
         bool customClanTag{ false };
         bool clocktag{ false };
         char clanTag[16];
         bool animatedClanTag{ false };
         bool fastDuck{ false };
         bool moonwalk{ false };
-        bool autoJumpBug{ false };
         bool edgejump{ false };
         int edgejumpkey{ 0 };
         bool slowwalk{ false };
         int slowwalkKey{ 0 };
         bool sniperCrosshair{ false };
         bool recoilCrosshair{ false };
+        bool drawAimbotFov{ false };
         bool autoPistol{ false };
         bool autoReload{ false };
         bool autoAccept{ false };
@@ -277,8 +276,6 @@ public:
         bool fixTabletSignal{ false };
         float maxAngleDelta{ 255.0f };
         bool fakePrime{ false };
-        bool drawAimbotFov{ false };
-        float actualFov{ 0.0f };
         int killSound{ 0 };
         std::string customKillSound;
         std::string customHitSound;

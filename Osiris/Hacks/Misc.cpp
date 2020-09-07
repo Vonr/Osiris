@@ -1,4 +1,4 @@
-﻿#include <mutex>
+#include <mutex>
 #include <numeric>
 #include <sstream>
 
@@ -40,7 +40,7 @@ void Misc::edgejump(UserCmd* cmd) noexcept
 }
 
 void Misc::autoJumpBug(UserCmd* cmd) noexcept {
-    if (!localPlayer || !config->misc.autoJumpBug)
+    if (!config->misc.autoJumpBug || !localPlayer || !localPlayer->isAlive() || localPlayer->moveType() == MoveType::LADDER)
         return;
 
     static auto hasLanded = false;
@@ -49,7 +49,7 @@ void Misc::autoJumpBug(UserCmd* cmd) noexcept {
         cmd->buttons &= ~UserCmd::IN_DUCK;
         hasLanded = true;
     } else if (!(localPlayer->flags() & 1)) {
-        cmd->buttons |= UserCmd::IN_DUCK;
+        if (localPlayer->velocity().z < 0) cmd->buttons |= UserCmd::IN_DUCK;
         hasLanded = false;
     }
    
@@ -438,7 +438,7 @@ void Misc::bunnyHop(UserCmd* cmd) noexcept
         if (cmd->buttons & UserCmd::IN_JUMP && !(localPlayer->flags() & 1)) {
             cmd->buttons &= ~UserCmd::IN_JUMP;
         }
-        else if ((hopsHit >= config->misc.bhopMinHits && rand() % 100 + 1 > config->misc.bhopHitchance) || hopsHit >= config->misc.bhopMaxHits) {
+        else if (config->misc.bhopMaxHits != -1 && ((hopsHit >= config->misc.bhopMinHits && rand() % 100 + 1 > config->misc.bhopHitChance) || hopsHit >= config->misc.bhopMaxHits)) {
             cmd->buttons &= ~UserCmd::IN_JUMP;
             hopsHit = 0;
         }
@@ -680,18 +680,15 @@ void Misc::killSound(GameEvent& event) noexcept
 }
 
 void Misc::drawAimbotFov() noexcept {
-    if (config->misc.drawAimbotFov && interfaces->engine->isInGame()) {
-        if (!localPlayer || !localPlayer->isAlive() || !localPlayer->getActiveWeapon()) return;
-        int weaponId = getWeaponIndex(localPlayer->getActiveWeapon()->itemDefinitionIndex2());
-        if (!config->aimbot[weaponId].enabled) weaponId = 0;
-        if (!config->aimbot[weaponId].enabled) return;
-        auto [width, heigth] = interfaces->surface->getScreenSize();
-        if (config->aimbot[weaponId].silent)
-            interfaces->surface->setDrawColor(255, 10, 10, 255);
-        else interfaces->surface->setDrawColor(10, 255, 10, 255);
-        float radius = std::tan(degreesToRadians(config->aimbot[weaponId].fov / 2.f)) / std::tan(degreesToRadians(config->misc.actualFov / 2.f)) * width;
-        interfaces->surface->drawOutlinedCircle(width / 2, heigth / 2, radius, 100);
-    }
+    if (config->misc.drawAimbotFov || !localPlayer || !localPlayer->isAlive() || !localPlayer->getActiveWeapon()) return;
+    int weaponId = getWeaponIndex(localPlayer->getActiveWeapon()->itemDefinitionIndex2());
+    if (!config->aimbot[weaponId].enabled) weaponId = 0;
+    if (!config->aimbot[weaponId].enabled) return;
+    auto [width, heigth] = interfaces->surface->getScreenSize();
+    if (config->aimbot[weaponId].silent) interfaces->surface->setDrawColor(255, 10, 10, 255);
+    else interfaces->surface->setDrawColor(10, 255, 10, 255);
+    float radius = std::tan(degreesToRadians(config->aimbot[weaponId].fov / 2.f)) / std::tan(degreesToRadians((90 + config->visuals.fov) / 2.f)) * width;
+    interfaces->surface->drawOutlinedCircle(width / 2, heigth / 2, radius, 100);
 }
 
 void Misc::purchaseList(GameEvent* event) noexcept
